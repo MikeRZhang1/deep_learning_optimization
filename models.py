@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# for MNIST and Fashion-MNIST
 class SimpleConvNN(nn.Module):
     def __init__(self):
         super(SimpleConvNN, self).__init__()
@@ -22,4 +23,14 @@ class SimpleConvNN(nn.Module):
         x = self.fc2(x)
         return x
 
-# class SimpleMLP(nn.Module):
+# for IRIS
+class SimpleMLP(nn.Module):
+    def __init__(self):
+        super(SimpleMLP, self).__init__()
+        self.fc1 = nn.Linear(4, 16)
+        self.fc2 = nn.Linear(16, 3)
+    
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
