@@ -363,3 +363,76 @@ class TrustRegionCauchy(Optimizer):
             return loss
 
         return loss
+
+class Levenberg_Marquardt(Optimizer):
+    def __init__(self, params, lambda_=10, lw_iter=10):
+        defaults = dict(lambda_=lambda_, lw_iter=lw_iter)
+        super().__init__(params, defaults)
+    
+    # obtains a flattened view of all parameters
+    def _gather_flat_params(self):
+        return torch.cat([p.data.view(-1) for group in self.param_groups for p in group['params']]) 
+    
+    # obtains a flattened view of all gradients
+    def _gather_flat_grad(self):
+        return torch.cat([p.grad.view(-1) for group in self.param_groups for p in group['params']])
+    
+    # sets the parameters of the model from a flattened view
+    def _set_params_from_flat(self, flat):
+        idx = 0
+        for group in self.param_groups:
+            for p in group['params']:
+                numel = p.numel()
+                p.data.copy_(flat[idx:idx+numel].view_as(p))
+                idx += numel
+
+    def step(self, closure):
+        loss = closure(backward=False, lm=True)
+        params = [p for group in self.param_groups for p in group['params']]
+        g_list = torch.autograd.grad(loss, params, create_graph=True)
+        g = torch.cat([gi.reshape(-1) for gi in g_list])
+
+        group = self.param_groups[0]
+        lambda_ = group.get('lambda_', 10)    # LM parameter
+        max_landweber_iter = group.get('lw_iter', 10)
+
+        # Hessian-vector product function
+        def H_GN_v(v):
+            Hv_list = torch.autograd.grad(
+                g, params, grad_outputs=v,
+                retain_graph=True, create_graph=False
+            )
+            return torch.cat([h.reshape(-1) for h in Hv_list])
+
+        def A_mv(v):
+            return H_GN_v(v) + lambda_ * v
+
+        # begin landweber workflow here
+        d0 = -g.clone()
+        d = d0.clone()
+        with torch.no_grad():
+            # choose tau using approximation
+            Ad0 = A_mv(d0)
+            est = (Ad0.norm() / (d0.norm() + 1e-12)).item()
+            tau = min(1e-3, 1.0 / (est**2 + 1e-12))
+    
+            # run Landweber iteration
+            for t in range(max_landweber_iter):
+                Ad = A_mv(d)
+                # print(f"iter {t}: ||d||={d.norm().item():.3e}, ||Ad||={Ad.norm().item():.3e}")
+                grad_lw = Ad + g            
+                d = d - tau * A_mv(grad_lw)
+                if torch.isnan(d).any():
+                    raise ValueError("NaN encountered in Landweber iterations.")
+
+        # d is now the LM step
+        pk = d
+
+        # update parameters
+        x0 = self._gather_flat_params()
+        new_x = x0 + pk
+        self._set_params_from_flat(new_x)
+
+        return loss
+
+        
