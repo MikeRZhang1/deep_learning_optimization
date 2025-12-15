@@ -50,7 +50,7 @@ class BiggerConvNN(nn.Module):
 # for wine quality regression
 class Wine_MLP(nn.Module):
     def __init__(self, input_size):
-        super(MLP, self).__init__()
+        super(Wine_MLP, self).__init__()
         self.fc1 = nn.Linear(input_size, 64)
         self.fc2 = nn.Linear(64, 32)
         self.fc3 = nn.Linear(32, 1)
